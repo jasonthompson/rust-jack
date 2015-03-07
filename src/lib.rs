@@ -1,5 +1,5 @@
 #![allow(non_upper_case_globals)]
-#![feature(collections,core,hash,libc,rustc_private,std_misc)]
+#![feature(collections,core,libc,rustc_private)]
 #[macro_use] extern crate rustc_bitflags;
 
 //#[crate_type = "lib"]
@@ -8,6 +8,7 @@ extern crate libc;
 extern crate collections;
 
 use libc::size_t;
+use std::ffi::CStr;
 use std::ffi::CString;
 use std::string::String;
 use std::str;
@@ -172,7 +173,8 @@ impl JackClient {
     pub fn open(name: &str, options: types::JackOptions) -> JackClient {
         unsafe {
             let status = JackNullStatus;
-            let innerclient = jack_client_open(CString::from_slice(name.as_bytes()).as_ptr(),options,&status);
+            let client_name = CString::new(name.as_bytes()).unwrap();
+            let innerclient = jack_client_open(client_name.as_ptr(),options,&status);
             JackClient { client: innerclient, status: status }
         }
     }
@@ -191,20 +193,21 @@ impl JackClient {
         unsafe {
             let name = jack_get_client_name(self.client);
             let lname = std::mem::copy_lifetime(self,&name);
-            let slice = std::ffi::c_str_to_bytes(lname);
+            let slice = std::ffi::CStr::from_ptr(*lname).to_bytes();
             str::from_utf8(slice).unwrap()
         }
     }
 
     pub fn get_uuid_for_name(&self, name: &str) -> Option<&str> {
         unsafe {
-            let uuid = jack_get_uuid_for_client_name(self.client,CString::from_slice(name.as_bytes()).as_ptr());
+            let client_name = CString::new(name.as_bytes()).unwrap();
+            let uuid = jack_get_uuid_for_client_name(self.client, client_name.as_ptr());
             if uuid.is_null() {
                 None
             }
             else {
                 let luuid = std::mem::copy_lifetime(self,&uuid);
-                let slice = std::ffi::c_str_to_bytes(luuid);
+                let slice = CStr::from_ptr(*luuid).to_bytes();
                 Some(str::from_utf8(slice).unwrap())
             }
         }
@@ -212,13 +215,14 @@ impl JackClient {
 
     pub fn get_name_for_uuid(&self, uuid: &str) -> Option<&str> {
         unsafe {
-            let name = jack_get_client_name_by_uuid(self.client,CString::from_slice(uuid.as_bytes()).as_ptr());
+            let client_name = CString::new(uuid.as_bytes()).unwrap();
+            let name = jack_get_client_name_by_uuid(self.client, client_name.as_ptr());
             if name.is_null() {
                 None
             }
             else {
                 let lname = std::mem::copy_lifetime(self,&name);
-                let slice = std::ffi::c_str_to_bytes(lname);
+                let slice = CStr::from_ptr(*lname).to_bytes();
                 Some(str::from_utf8(slice).unwrap())
             }
         }
@@ -251,9 +255,11 @@ impl JackClient {
 
     pub fn register_port(&self, port_name: &str, port_type: &str, flags: JackPortFlags, buffer_size: u64) -> JackPort {
         unsafe {
+            let port_name = CString::new(port_name.as_bytes()).unwrap();
+            let port_type = CString::new(port_type.as_bytes()).unwrap();
             let port = jack_port_register(self.client,
-                                          CString::from_slice(port_name.as_bytes()).as_ptr(),
-                                          CString::from_slice(port_type.as_bytes()).as_ptr(),
+                                          port_name.as_ptr(),
+                                          port_type.as_ptr(),
                                           flags,
                                           buffer_size);
             JackPort { port: port }
@@ -269,7 +275,7 @@ impl JackClient {
                 let mut idx = 0;
                 while !((*(conns.offset(idx))).is_null()) {
                     let s = *(conns.offset(idx)) as *const i8;
-                    let slice = std::ffi::c_str_to_bytes(&s);
+                    let slice = CStr::from_ptr(s).to_bytes();
                     vec.push(String::from_str(str::from_utf8(slice).unwrap()));
                     idx += 1;
                 }
@@ -320,9 +326,11 @@ impl JackClient {
 
     pub fn connect(&self, source_port: &str, destination_port: &str) -> Result<(), String> { // todo: convert to JackError or something like that
         unsafe {
+            let source_port = CString::new(source_port.as_bytes()).unwrap();
+            let destination_port = CString::new(destination_port.as_bytes()).unwrap();
             let res = jack_connect(self.client,
-                                   CString::from_slice(source_port.as_bytes()).as_ptr(),
-                                   CString::from_slice(destination_port.as_bytes()).as_ptr());
+                                   source_port.as_ptr(),
+                                   destination_port.as_ptr());
             if res == 0 {
                 Ok(())
             }
@@ -337,9 +345,11 @@ impl JackClient {
 
     pub fn disconnect(&self, source_port: &str, destination_port: &str) -> bool {
         unsafe {
+            let source_port = CString::new(source_port.as_bytes()).unwrap();
+            let destination_port = CString::new(destination_port.as_bytes()).unwrap();
             jack_disconnect(self.client,
-                            CString::from_slice(source_port.as_bytes()).as_ptr(),
-                            CString::from_slice(destination_port.as_bytes()).as_ptr()) == 0
+                            source_port.as_ptr(),
+                            destination_port.as_ptr()) == 0
         }
     }
 
@@ -351,8 +361,9 @@ impl JackClient {
 
     pub fn request_monitor_by_name(&self, port_name: &str, on: bool) -> bool {
         let onoff = if on { 1 } else { 0 };
+        let port_name = CString::new(port_name.as_bytes()).unwrap();
         unsafe {
-            jack_port_request_monitor_by_name(self.client,CString::from_slice(port_name.as_bytes()).as_ptr(),onoff) == 0
+            jack_port_request_monitor_by_name(self.client, port_name.as_ptr(), onoff) == 0
         }
     }
 
@@ -375,7 +386,7 @@ impl JackPort {
         unsafe {
             let name = jack_port_name(self.port);
             let lname = std::mem::copy_lifetime(self,&name);
-            let slice = std::ffi::c_str_to_bytes(lname);
+            let slice = CStr::from_ptr(*lname).to_bytes();
             str::from_utf8(slice).unwrap()
         }
     }
@@ -390,26 +401,29 @@ impl JackPort {
         unsafe {
             let name = jack_port_short_name(self.port);
             let lname = std::mem::copy_lifetime(self,&name);
-            let slice = std::ffi::c_str_to_bytes(lname);
+            let slice = CStr::from_ptr(*lname).to_bytes();
             str::from_utf8(slice).unwrap()
         }
     }
 
     pub fn set_name(&self, name: &str) -> bool {
+        let port_name = CString::new(name.as_bytes()).unwrap();
         unsafe {
-            jack_port_set_name(self.port, CString::from_slice(name.as_bytes()).as_ptr()) == 0
+            jack_port_set_name(self.port, port_name.as_ptr()) == 0
         }
     }
 
     pub fn set_alias(&self, alias: &str) -> bool {
+        let port_alias = CString::new(alias.as_bytes()).unwrap();
         unsafe {
-            jack_port_set_alias(self.port, CString::from_slice(alias.as_bytes()).as_ptr()) == 0
+            jack_port_set_alias(self.port, port_alias.as_ptr()) == 0
         }
     }
 
     pub fn unset_alias(&self, alias: &str) -> bool {
+        let port_alias = CString::new(alias.as_bytes()).unwrap();
         unsafe {
-            jack_port_unset_alias(self.port, CString::from_slice(alias.as_bytes()).as_ptr()) == 0
+            jack_port_unset_alias(self.port, port_alias.as_ptr()) == 0
         }
     }
 
@@ -426,13 +440,13 @@ impl JackPort {
             if acnt > 0 {
                 let s = jack_as[0] as *const i8;
                 let ls = std::mem::copy_lifetime(self,&s);
-                let slice = std::ffi::c_str_to_bytes(ls);
+                let slice = CStr::from_ptr(*ls).to_bytes();
                 ret.push(str::from_utf8(slice).unwrap());
             }
             if acnt > 1 {
                 let s = jack_as[1] as *const i8;
                 let ls = std::mem::copy_lifetime(self,&s);
-                let slice = std::ffi::c_str_to_bytes(ls);
+                let slice = CStr::from_ptr(*ls).to_bytes();
                 ret.push(str::from_utf8(slice).unwrap());
             }
             ret
@@ -449,7 +463,7 @@ impl JackPort {
         unsafe {
             let tname = jack_port_type(self.port);
             let ltname = std::mem::copy_lifetime(self,&tname);
-            let slice = std::ffi::c_str_to_bytes(ltname);
+            let slice = CStr::from_ptr(*ltname).to_bytes();
             str::from_utf8(slice).unwrap()
         }
     }
@@ -467,8 +481,9 @@ impl JackPort {
     }
 
     pub fn connected_to(&self, port: &str) -> bool {
+        let port_name = CString::new(port.as_bytes()).unwrap();
         unsafe {
-            !(jack_port_connected_to(self.port,CString::from_slice(port.as_bytes()).as_ptr()) == 0)
+            !(jack_port_connected_to(self.port, port_name.as_ptr()) == 0)
         }
     }
 
@@ -499,7 +514,7 @@ impl JackPort {
                 let mut idx = 0;
                 while !((*(conns.offset(idx))).is_null()) {
                     let s = *(conns.offset(idx)) as *const i8;
-                    let slice = std::ffi::c_str_to_bytes(&s);
+                    let slice = CStr::from_ptr(s).to_bytes();
                     vec.push(String::from_str(str::from_utf8(slice).unwrap()));
                     idx += 1;
                 }
@@ -518,7 +533,7 @@ impl JackPort {
                 let mut idx = 0;
                 while !((*(conns.offset(idx))).is_null()) {
                     let s = *(conns.offset(idx)) as *const i8;
-                    let slice = std::ffi::c_str_to_bytes(&s);
+                    let slice = CStr::from_ptr(s).to_bytes();
                     vec.push(String::from_str(str::from_utf8(slice).unwrap()));
                     idx += 1;
                 }
@@ -615,9 +630,7 @@ impl ReservedMidiEvent {
             panic!("Too much data passed to write_vec");
         }
         unsafe {
-            std::ptr::copy_memory(self.buffer,vec.as_ptr(),self.len as usize);
+            std::ptr::copy(self.buffer,vec.as_ptr(),self.len as usize);
         }
     }
 }
-
-

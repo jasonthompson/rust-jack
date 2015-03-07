@@ -85,7 +85,7 @@ pub struct JackPositionT {
     pub bbt_offset: JackNframesT,
     pub audio_frames_per_video_frame: ::libc::c_float,
     pub video_offset: JackNframesT,
-    pub padding: [i32;7us],
+    pub padding: [i32;7usize],
     unique_2: JackUniqueT,
 }
 
